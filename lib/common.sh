@@ -1,5 +1,5 @@
 #!/bin/bash
-# Shared, side-effect-free schedule validation and rendering.
+# Shared schedule validation and installation/management helpers.
 
 primer_validate_hours() {
   [[ ${1:-} =~ ^([01]?[0-9]|2[0-3])(,([01]?[0-9]|2[0-3]))*$ ]]
@@ -31,7 +31,7 @@ EOF
 
 # All administrative writers share one lock; readers remain available.
 primer_lock_management() {
-  exec 8>/run/codex-primer-management.lock
+  exec 8>/run/codex-primer-management.lock || return 1
   if ! flock -n 8; then
     printf '%s\n' 'Another install or management command is running; retry after it finishes.' >&2
     return 1

@@ -70,7 +70,7 @@ for task_test_mode in success wrong-reply failure empty-reply api-key login-fail
     empty-reply) [[ $(systemctl show codex-primer.service -p ExecMainStatus --value) == 1 ]] ;;
   esac
 done
-[[ $(sudo wc -l </var/lib/codex-primer/exec-attempts 2>/dev/null || sudo cat /var/lib/codex-primer/exec-attempts | wc -l) == 4 ]]
+[[ $(sudo cat /var/lib/codex-primer/exec-attempts | wc -l) == 4 ]]
 # Inject inherited credentials directly into the wrapper, bypassing systemd's
 # environment filtering, and verify that the wrapper clears them too.
 printf 'success\n' | sudo tee /var/lib/codex-primer/test-mode >/dev/null
