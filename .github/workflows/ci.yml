@@ -1,0 +1,23 @@
+name: Shell and installation checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bash syntax and ShellCheck
+        run: |
+          for script in install.sh manage.sh send-once.sh lib/common.sh tests/*.sh; do
+            bash -n "$script"
+          done
+          shellcheck -x install.sh manage.sh send-once.sh lib/common.sh tests/*.sh
+      - name: Schedule and input validation
+        run: bash tests/smoke.sh
+      - name: Fresh install, upgrade and uninstall without model requests
+        run: CODEX_PRIMER_INTEGRATION=1 bash tests/integration.sh

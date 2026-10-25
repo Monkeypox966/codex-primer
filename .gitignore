@@ -1,0 +1,14 @@
+# Runtime state and credentials never belong in this source repository.
+.codex/
+auth.json
+*.key
+*.pem
+id_ed25519*
+.env
+.env.*
+*.log
+*.sqlite*
+*.tar.gz
+*.zip
+.DS_Store
+Thumbs.db
