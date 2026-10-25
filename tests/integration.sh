@@ -46,6 +46,21 @@ grep -qx 'OnCalendar=\*-\*-\* 05,10,15,20:00:00 UTC' /etc/systemd/system/codex-p
 sudo bash "$task_root/install.sh" --login skip --no-enable --hours 02,07
 grep -qx 'OnCalendar=\*-\*-\* 02,07:00:00 UTC' /etc/systemd/system/codex-primer.timer
 sudo /usr/local/bin/codex-primer schedule 05,10,15,20 Asia/Shanghai
+sudo /usr/local/bin/codex-primer schedule 05,10 UTC
+sudo /usr/local/bin/codex-primer schedule 02,07
+grep -qx 'OnCalendar=\*-\*-\* 02,07:00:00 UTC' /etc/systemd/system/codex-primer.timer
+sudo /usr/local/bin/codex-primer schedule 05,10,15,20 Asia/Shanghai
+# Upgrades must not reactivate a timer that the operator paused.
+sudo /usr/local/bin/codex-primer enable
+sudo /usr/local/bin/codex-primer disable
+sudo bash "$task_root/install.sh" --login skip
+if systemctl is-enabled --quiet codex-primer.timer || systemctl is-active --quiet codex-primer.timer; then exit 1; fi
+# Explicit --enable remains available, and a stopped-but-enabled timer stays stopped.
+sudo bash "$task_root/install.sh" --login skip --enable
+sudo systemctl stop codex-primer.timer
+sudo bash "$task_root/install.sh" --login skip
+systemctl is-enabled --quiet codex-primer.timer
+if systemctl is-active --quiet codex-primer.timer; then exit 1; fi
 sudo /usr/local/bin/codex-primer enable
 systemctl is-enabled --quiet codex-primer.timer
 systemctl is-active --quiet codex-primer.timer
@@ -69,6 +84,11 @@ for task_test_mode in success wrong-reply failure empty-reply api-key login-fail
     failure) [[ $(systemctl show codex-primer.service -p ExecMainStatus --value) == 17 ]] ;;
     empty-reply) [[ $(systemctl show codex-primer.service -p ExecMainStatus --value) == 1 ]] ;;
   esac
+  sudo test -f /var/lib/codex-primer/last-run.json
+  [[ $(sudo stat -c %a /var/lib/codex-primer/last-run.json) == 600 ]]
+  if [[ $task_test_mode == success ]]; then
+    sudo grep -q '"exitCode":0,"outcome":"success"' /var/lib/codex-primer/last-run.json
+  fi
 done
 [[ $(sudo cat /var/lib/codex-primer/exec-attempts | wc -l) == 4 ]]
 # Inject inherited credentials directly into the wrapper, bypassing systemd's
@@ -79,6 +99,13 @@ sudo runuser -u codex-primer -- env OPENAI_API_KEY=test-only CODEX_HOME=/tmp/not
 # Failed status must also stop a direct wrapper invocation before exec.
 printf 'login-failure\n' | sudo tee /var/lib/codex-primer/test-mode >/dev/null
 if sudo runuser -u codex-primer -- /opt/codex-primer/send-once.sh; then exit 1; fi
+[[ $(sudo cat /var/lib/codex-primer/exec-attempts | wc -l) == 5 ]]
+# A wedged login check is bounded, creates a failure summary, and never calls exec.
+printf 'login-timeout\n' | sudo tee /var/lib/codex-primer/test-mode >/dev/null
+task_probe_start=$SECONDS
+if sudo runuser -u codex-primer -- /opt/codex-primer/send-once.sh; then exit 1; fi
+((SECONDS - task_probe_start < 12))
+sudo grep -q '"outcome":"login-failed"' /var/lib/codex-primer/last-run.json
 [[ $(sudo cat /var/lib/codex-primer/exec-attempts | wc -l) == 5 ]]
 # Another writer must fail promptly without modifying the installed timer.
 task_schedule_before=$(sha256sum /etc/systemd/system/codex-primer.timer)

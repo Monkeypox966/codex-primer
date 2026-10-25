@@ -47,7 +47,8 @@ primer_as_user() {
 
 primer_has_subscription_login() {
   local task_login_status
-  task_login_status=$(primer_as_user /opt/codex-primer/bin/codex-x86_64-unknown-linux-musl login status 2>&1) || return 1
+  task_login_status=$(primer_as_user /usr/bin/timeout --signal=TERM --kill-after=2s 5s \
+    /opt/codex-primer/bin/codex-x86_64-unknown-linux-musl login status 2>&1) || return 1
   [[ $task_login_status == *'Logged in using ChatGPT'* ]]
 }
 

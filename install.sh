@@ -7,7 +7,7 @@ source "$task_source_dir/lib/common.sh"
 task_hours=05,10,15,20
 task_timezone=Asia/Shanghai
 task_login=device
-task_enable=true
+task_enable=auto
 task_check=false
 task_hours_set=false
 task_timezone_set=false
@@ -22,10 +22,11 @@ Usage: sudo bash install.sh [options]
   --hours 05,10,15,20       Daily hours, 0-23 (default: 05,10,15,20)
   --timezone Asia/Shanghai IANA timezone (default: Asia/Shanghai)
   --login device|browser|skip  First-login method (default: device)
-  --no-enable              Install without enabling the timer
+  --enable                 Explicitly enable the timer, including on upgrades
+  --no-enable              Preserve timer enablement (off on first install)
   --check                  Read-only prerequisite and schedule check
   -h, --help               Show help
-Existing login is retained. Existing custom schedule is retained unless overridden.
+Upgrades preserve login, unspecified schedule settings and timer activation.
 EOF
 }
 
@@ -43,7 +44,8 @@ while (($#)); do
         --login) task_login=$2 ;;
       esac
       shift 2 ;;
-    --no-enable) task_enable=false; shift ;;
+    --enable) task_enable=yes; shift ;;
+    --no-enable) task_enable=no; shift ;;
     --check) task_check=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown argument: $1" ;;
@@ -63,6 +65,12 @@ done
 if ! $task_check; then
   ((EUID == 0)) || die 'Run this installer with sudo or as root'
   primer_lock_management || exit 1
+fi
+task_timer_exists=false
+task_timer_was_active=false
+if [[ -f /etc/systemd/system/codex-primer.timer ]]; then
+  task_timer_exists=true
+  if systemctl is-active --quiet codex-primer.timer; then task_timer_was_active=true; fi
 fi
 if [[ -f /etc/systemd/system/codex-primer.timer ]] && { ! $task_hours_set || ! $task_timezone_set; }; then
   if task_existing_calendar=$(primer_existing_calendar /etc/systemd/system/codex-primer.timer); then
@@ -175,10 +183,13 @@ if ! primer_has_subscription_login; then
     skip) printf '%s\n' 'Login skipped. The service will skip requests until an auth file exists.' ;;
   esac
 fi
-if $task_enable; then
+if [[ $task_enable == yes ]] || { [[ $task_enable == auto ]] && ! $task_timer_exists; }; then
   systemctl enable --now codex-primer.timer
   systemctl restart codex-primer.timer
+elif $task_timer_was_active; then
+  systemctl restart codex-primer.timer
+  printf '%s\n' 'Existing active timer reloaded; enablement was preserved.'
 else
-  printf '%s\n' 'Timer enablement was not changed (--no-enable).'
+  printf '%s\n' 'Existing paused state was preserved; use codex-primer enable to resume.'
 fi
 printf '%s\n' 'Installed. Run: sudo codex-primer status'

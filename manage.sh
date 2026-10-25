@@ -31,7 +31,11 @@ case "$task_command" in
     primer_as_user /opt/codex-primer/bin/codex-x86_64-unknown-linux-musl login status || true
     systemctl show codex-primer.service -p Result -p ActiveState -p MemoryMax -p CPUQuotaPerSecUSec
     systemctl list-timers --all codex-primer.timer --no-pager
-    grep '^OnCalendar=' /etc/systemd/system/codex-primer.timer ;;
+    grep '^OnCalendar=' /etc/systemd/system/codex-primer.timer
+    if [[ -f /var/lib/codex-primer/last-run.json ]]; then
+      printf '%s\n' 'Last request (UTC):'
+      cat /var/lib/codex-primer/last-run.json
+    fi ;;
   logs)
     task_lines=${1:-30}
     [[ $task_lines =~ ^[1-9][0-9]{0,3}$ ]] || { printf '%s\n' 'LINES must be 1-9999.' >&2; exit 1; }
@@ -55,7 +59,15 @@ case "$task_command" in
   disable) systemctl disable --now codex-primer.timer ;;
   schedule)
     task_hours=${1:-}
-    task_timezone=${2:-Asia/Shanghai}
+    task_timezone=${2:-}
+    if [[ -z $task_timezone ]]; then
+      if task_existing_calendar=$(primer_existing_calendar /etc/systemd/system/codex-primer.timer); then
+        task_timezone=${task_existing_calendar#*$'\n'}
+      else
+        printf '%s\n' 'Cannot read the current timezone; specify it explicitly.' >&2
+        exit 1
+      fi
+    fi
     if ! primer_validate_hours "$task_hours" || ! primer_validate_timezone "$task_timezone"; then
       printf '%s\n' 'Invalid hours or timezone.' >&2
       exit 1

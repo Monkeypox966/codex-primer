@@ -5,6 +5,7 @@ task_mode=$(cat /var/lib/codex-primer/test-mode 2>/dev/null || printf success)
 if [[ ${1:-} == --version ]]; then
   printf '%s\n' 'codex-cli 0.164.0'
 elif [[ ${1:-} == login && ${2:-} == status ]]; then
+  if [[ $task_mode == login-timeout ]]; then sleep 60; fi
   if [[ $task_mode == api-key ]]; then printf '%s\n' 'Logged in using an API key'; else printf '%s\n' 'Logged in using ChatGPT'; fi
   if [[ $task_mode == login-failure ]]; then exit 31; fi
 elif [[ ${1:-} == exec ]]; then

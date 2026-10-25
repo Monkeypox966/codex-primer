@@ -1,6 +1,7 @@
 # Runtime state and credentials never belong in this source repository.
 .codex/
 auth.json
+last-run.json
 *.key
 *.pem
 id_ed25519*
