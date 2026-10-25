@@ -15,7 +15,7 @@ task_started_at=$(/usr/bin/date -u +%FT%TZ)
 task_reply=
 task_outcome=interrupted
 # Called indirectly by the EXIT trap, including early login failures.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2329,SC2317
 finish_request() {
   local task_status=$? task_peak_bytes=null task_record task_finished_at task_duration
   [[ -z $task_reply ]] || rm -f -- "$task_reply"
