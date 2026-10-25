@@ -19,7 +19,10 @@ printf '[Service]\nExecStart=/usr/bin/sleep infinity\n' | sudo tee "/etc/systemd
 sudo systemctl daemon-reload
 sudo systemctl start "$task_sentinel"
 task_pid_before=$(systemctl show "$task_sentinel" -p MainPID --value)
-sudo bash "$task_root/install.sh" --login skip --no-enable --hours 01,06 --timezone UTC
+sudo bash "$task_root/install.sh" --login skip --no-enable
+[[ $(grep -c '^OnCalendar=' /etc/systemd/system/codex-primer.timer) == 4 ]]
+grep -qx 'OnCalendar=\*-\*-\* 10:01:00 Asia/Shanghai' /etc/systemd/system/codex-primer.timer
+sudo /usr/local/bin/codex-primer schedule 01,06 UTC
 if sudo test -f /var/lib/codex-primer/.codex/auth.json; then exit 1; fi
 if systemctl is-enabled --quiet codex-primer.timer; then exit 1; fi
 sudo touch /var/lib/codex-primer/preserve-me
@@ -51,6 +54,14 @@ sudo /usr/local/bin/codex-primer schedule 02,07
 grep -qx 'OnCalendar=\*-\*-\* 02,07:00:00 UTC' /etc/systemd/system/codex-primer.timer
 sudo /usr/local/bin/codex-primer schedule 05,10,15,20 Asia/Shanghai
 # Upgrades must not reactivate a timer that the operator paused.
+sudo /usr/local/bin/codex-primer schedule 05:00,10:01,15:02,20:03 Asia/Shanghai
+task_schedule_before=$(sha256sum /etc/systemd/system/codex-primer.timer)
+sudo bash "$task_root/install.sh" --login skip --no-enable
+[[ $(sha256sum /etc/systemd/system/codex-primer.timer) == "$task_schedule_before" ]]
+sudo bash "$task_root/install.sh" --login skip --no-enable --timezone UTC
+grep -qx 'OnCalendar=\*-\*-\* 10:01:00 UTC' /etc/systemd/system/codex-primer.timer
+[[ $(grep -c '^OnCalendar=' /etc/systemd/system/codex-primer.timer) == 4 ]]
+sudo bash "$task_root/install.sh" --login skip --no-enable --times 05:00,10:01,15:02,20:03 --timezone Asia/Shanghai
 sudo /usr/local/bin/codex-primer enable
 sudo /usr/local/bin/codex-primer disable
 sudo bash "$task_root/install.sh" --login skip

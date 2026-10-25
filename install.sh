@@ -4,7 +4,7 @@ set -euo pipefail
 task_source_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lib/common.sh
 source "$task_source_dir/lib/common.sh"
-task_hours=05,10,15,20
+task_hours=05:00,10:01,15:02,20:03
 task_timezone=Asia/Shanghai
 task_login=device
 task_enable=auto
@@ -19,7 +19,8 @@ task_sha256=90dd0b03b28afcb7fa733a4f73b413db2916a47347efd43fb669cc1c774ee8e4
 usage() {
   cat <<'EOF'
 Usage: sudo bash install.sh [options]
-  --hours 05,10,15,20       Daily hours, 0-23 (default: 05,10,15,20)
+  --times 05:00,10:01,15:02,20:03  Daily HH:MM times (default)
+  --hours 05,10,15,20       Legacy whole-hour schedule
   --timezone Asia/Shanghai IANA timezone (default: Asia/Shanghai)
   --login device|browser|skip  First-login method (default: device)
   --enable                 Explicitly enable the timer, including on upgrades
@@ -36,10 +37,10 @@ trap cleanup EXIT
 
 while (($#)); do
   case "$1" in
-    --hours|--timezone|--login)
+    --times|--hours|--timezone|--login)
       (($# >= 2)) || die "Missing value for $1"
       case "$1" in
-        --hours) task_hours=$2; task_hours_set=true ;;
+        --times|--hours) task_hours=$2; task_hours_set=true ;;
         --timezone) task_timezone=$2; task_timezone_set=true ;;
         --login) task_login=$2 ;;
       esac
@@ -77,12 +78,14 @@ if [[ -f /etc/systemd/system/codex-primer.timer ]] && { ! $task_hours_set || ! $
     $task_hours_set || task_hours=${task_existing_calendar%%$'\n'*}
     $task_timezone_set || task_timezone=${task_existing_calendar#*$'\n'}
   elif $task_hours_set || $task_timezone_set; then
-    die 'Cannot parse the existing schedule; specify both --hours and --timezone'
+    die 'Cannot parse the existing schedule; specify both --times and --timezone'
   fi
 fi
-primer_validate_hours "$task_hours" || die 'Invalid hours; example: 05,10,15,20'
+primer_validate_schedule "$task_hours" || die 'Invalid times; example: 05:00,10:01,15:02,20:03'
 primer_validate_timezone "$task_timezone" || die 'Invalid or unavailable IANA timezone; install tzdata if needed'
-systemd-analyze calendar "*-*-* ${task_hours}:00:00 ${task_timezone}" >/dev/null
+while IFS= read -r task_calendar; do
+  systemd-analyze calendar "$task_calendar" >/dev/null
+done < <(primer_calendar_expressions "$task_hours" "$task_timezone")
 if $task_check; then
   printf '%s\n' 'Prerequisites and schedule are valid. No changes made.'
   exit 0

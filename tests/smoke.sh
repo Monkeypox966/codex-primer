@@ -39,3 +39,23 @@ printf 'new\n' >"$task_temp/source"
 primer_atomic_install 0644 "$task_temp/source" "$task_temp/target"
 [[ $(<"$task_temp/target") == new && $(stat -c %a "$task_temp/target") == 644 ]]
 printf '%s\n' 'Calendar parsing and atomic file replacement checks passed.'
+
+for task_times in 05:00,10:01,15:02,20:03 00:00 23:59; do
+  primer_validate_schedule "$task_times"
+done
+for task_times in 24:00 05:60 5:00 '05:00,' '05:00;id' 05:00,10; do
+  if primer_validate_schedule "$task_times"; then exit 1; fi
+done
+primer_render_timer 05:00,10:01,15:02,20:03 Asia/Shanghai >"$task_temp/minutes.timer"
+[[ $(grep -c '^OnCalendar=' "$task_temp/minutes.timer") == 4 ]]
+[[ $(primer_existing_calendar "$task_temp/minutes.timer") == $'05:00,10:01,15:02,20:03\nAsia/Shanghai' ]]
+task_previous_epoch=
+while IFS= read -r task_calendar; do
+  task_next=$(LC_ALL=C TZ=UTC systemd-analyze calendar --base-time='2026-10-24 16:00:00 UTC' "$task_calendar" | sed -n 's/^ *Next elapse: //p')
+  task_epoch=$(date -d "$task_next" +%s)
+  if [[ -n $task_previous_epoch ]]; then
+    ((task_epoch - task_previous_epoch == 18060))
+  fi
+  task_previous_epoch=$task_epoch
+done < <(primer_calendar_expressions 05:00,10:01,15:02,20:03 Asia/Shanghai)
+printf '%s\n' 'Minute schedules round-trip correctly; daytime intervals are exactly 5h 1m.'

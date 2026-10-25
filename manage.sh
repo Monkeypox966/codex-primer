@@ -12,7 +12,7 @@ Usage: sudo codex-primer COMMAND
   login [device|browser]       Sign in to the dedicated account
   enable                       Enable the fixed schedule
   disable                      Disable future scheduled requests
-  schedule HOURS [TIMEZONE]    Example: schedule 05,10,15,20 Asia/Shanghai
+  schedule TIMES [TIMEZONE]    Example: schedule 05:00,10:01,15:02,20:03 Asia/Shanghai
   uninstall [--purge]          Remove this project; preserve login unless --purge
 EOF
 }
@@ -68,11 +68,13 @@ case "$task_command" in
         exit 1
       fi
     fi
-    if ! primer_validate_hours "$task_hours" || ! primer_validate_timezone "$task_timezone"; then
-      printf '%s\n' 'Invalid hours or timezone.' >&2
+    if ! primer_validate_schedule "$task_hours" || ! primer_validate_timezone "$task_timezone"; then
+      printf '%s\n' 'Invalid times or timezone.' >&2
       exit 1
     fi
-    systemd-analyze calendar "*-*-* ${task_hours}:00:00 ${task_timezone}"
+    while IFS= read -r task_calendar; do
+      systemd-analyze calendar "$task_calendar"
+    done < <(primer_calendar_expressions "$task_hours" "$task_timezone")
     task_timer=$(mktemp /etc/systemd/system/codex-primer.timer.XXXXXXXX)
     trap 'rm -f -- "$task_timer"' EXIT
     primer_render_timer "$task_hours" "$task_timezone" >"$task_timer"

@@ -2,7 +2,7 @@
 
 在小内存 Debian / Ubuntu 服务器上，每天固定发送四次轻量 Codex 请求。
 
-默认在**北京时间 05:00、10:00、15:00、20:00** 使用 **GPT-6 Luna / low**，只要求回复 `OK`。时间可配置，采用系统定时器，完成后退出。
+默认在**北京时间 05:00、10:01、15:02、20:03** 使用 **GPT-6 Luna / low**，只要求回复 `OK`。白天相邻两次间隔 **5 小时 01 分钟**，跨夜至次日 05:00 为 8 小时 57 分钟。时间可配置，采用系统定时器，完成后退出。
 
 > 本项目安排普通订阅请求，不能增加额度、重置正在生效的窗口或绕过周额度。固定整点发送不保证每次开启新窗口，也不会根据额度连续重试。
 
@@ -77,13 +77,13 @@ sudo codex-primer enable       # 恢复，并随系统启动
 
 ```bash
 # 安装时指定
-sudo bash install.sh --hours 05,10,15,20 --timezone Asia/Shanghai
+sudo bash install.sh --times 05:00,10:01,15:02,20:03 --timezone Asia/Shanghai
 
 # 安装后修改
-sudo codex-primer schedule 06,11,16,21 Asia/Shanghai
+sudo codex-primer schedule 05:00,10:01,15:02,20:03 Asia/Shanghai
 
 # 只修改小时，保留当前时区
-sudo codex-primer schedule 05,10,15,20
+sudo codex-primer schedule 05:00,10:01,15:02,20:03
 
 # 只检查环境及参数，不写入系统
 bash install.sh --check
@@ -96,6 +96,8 @@ sudo bash install.sh --enable
 ```
 
 首次安装默认启用；更新默认保留已有启停状态，`--enable` 显式恢复，`--no-enable` 在首次安装时不启用。暂停已安装任务请使用 `disable`。时间按指定 IANA 时区解释，不修改服务器全局时区。状态表格可能显示服务器本地时间；同一输出的 `OnCalendar` 显示实际配置。运行摘要的时间使用 UTC，以字段后的 `Z` 标识。
+
+`--times` 和 `schedule` 支持逗号分隔的 `HH:MM`，每个时间点单独生成一条 `OnCalendar`，避免小时与分钟组合产生多余触发。旧的 `--hours 05,10,15,20` 及整点 `schedule` 写法继续兼容。已有安装更新时保留原时间；要迁移到新默认时间，请显式执行上面的 `schedule` 命令。
 
 <br>
 

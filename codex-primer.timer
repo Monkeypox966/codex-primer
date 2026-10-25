@@ -1,8 +1,11 @@
 [Unit]
-Description=Minimal Codex request at 05:00, 10:00, 15:00 and 20:00 Beijing time
+Description=Minimal Codex request at 05:00, 10:01, 15:02 and 20:03 Beijing time
 
 [Timer]
-OnCalendar=*-*-* 05,10,15,20:00:00 Asia/Shanghai
+OnCalendar=*-*-* 05:00:00 Asia/Shanghai
+OnCalendar=*-*-* 10:01:00 Asia/Shanghai
+OnCalendar=*-*-* 15:02:00 Asia/Shanghai
+OnCalendar=*-*-* 20:03:00 Asia/Shanghai
 AccuracySec=1s
 RandomizedDelaySec=0
 Persistent=false
