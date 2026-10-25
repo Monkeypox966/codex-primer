@@ -6,6 +6,8 @@
 
 > 本项目安排普通订阅请求，不能增加额度、重置正在生效的窗口或绕过周额度。固定整点发送不保证每次开启新窗口，也不会根据额度连续重试。
 
+<br>
+
 ## 一键安装
 
 适用于 **Debian / Ubuntu x86_64、运行 systemd 的主机**，需要 root 或 sudo。已在 Debian 13 实机验证，Ubuntu 24.04 的安装与卸载流程已通过 GitHub Actions。
@@ -50,6 +52,8 @@ sudo apt-get install -y ca-certificates curl tar coreutils util-linux passwd tzd
 
 登录也会检查发送锁，避免请求正在运行时修改登录数据；并发的管理命令会直接给出提示，不排队或反复重试。
 
+<br>
+
 ## 管理命令
 
 ```bash
@@ -66,6 +70,8 @@ sudo codex-primer enable       # 恢复，并随系统启动
 登录检查单独限制为 5 秒，终止后最多等待 2 秒，避免检查卡住导致任务一直占用资源。每次实际执行原子保存一份小型 `last-run.json`，包含起止时间、耗时、结果、退出码及可获得的内存峰值；`status` 会直接显示。不保存提示词、回复内容或登录凭据，历史记录不会无限增长。因并发锁跳过的触发不覆盖上次结果；OOM 或强制终止时仍应结合 systemd 的 `Result` 判断。
 
 发送前确认专用账号使用 ChatGPT 登录，并移除继承的 API Key 和其他 Codex 数据目录设置，避免误用不同的认证来源。请求只有在 CLI 退出码为零且最终回复确实为 `OK` 时才记为成功。最终回复放入权限受限的临时文件，结束后立即清理；检查登录状态本身不发送模型请求。
+
+<br>
 
 ## 修改时间
 
@@ -90,6 +96,8 @@ sudo bash install.sh --enable
 ```
 
 首次安装默认启用；更新默认保留已有启停状态，`--enable` 显式恢复，`--no-enable` 在首次安装时不启用。暂停已安装任务请使用 `disable`。时间按指定 IANA 时区解释，不修改服务器全局时区。状态表格可能显示服务器本地时间；同一输出的 `OnCalendar` 显示实际配置。运行摘要的时间使用 UTC，以字段后的 `Z` 标识。
+
+<br>
 
 ## 无头服务器登录
 
@@ -120,6 +128,8 @@ sudo codex-primer login device
 
 凭据保存在服务器 `/var/lib/codex-primer/.codex/auth.json`，不会进入源码仓库。登录失效、额度不足或模型不可用时记录失败，等待下个固定触发点，不自动切换到昂贵模型。
 
+<br>
+
 ## 内存与资源
 
 - 官方原生 CLI，固定版本 **0.164.0**，核对 SHA-256；运行无需 Node.js、Python 或 Docker。
@@ -135,6 +145,8 @@ Debian 13、约 1 GiB 内存主机上的一次测试：服务内存峰值 **30.9
 
 当前 CLI 在工具主机关闭时可能记录 `Code Mode is unavailable` 非致命提示；结合最终 `turn.completed`、回复 `OK` 和退出码判断结果。
 
+<br>
+
 ## 卸载
 
 ```bash
@@ -143,6 +155,8 @@ sudo codex-primer uninstall --purge   # 同时清除本项目的专用账号及�
 ```
 
 只操作本项目的账号、目录与 systemd 单元，不操作其他代理、防火墙、网络服务或容器。历史日志由系统 journald 按原策略保留。
+
+<br>
 
 ## 验证
 
@@ -154,6 +168,8 @@ shellcheck -x install.sh manage.sh send-once.sh lib/common.sh tests/*.sh
 `tests/integration.sh` 在一次性 systemd 主机上验证首次 / 重复安装、只修改小时或时区时保留另一项、启停、缺少登录和 API Key 登录时拒绝请求，以及两种卸载方式，同时检查另一服务的进程号不变。发送包装脚本用本地假 CLI 验证正确回复、错误回复和原始错误码传递。为避免误操作，必须显式设置 `CODEX_PRIMER_INTEGRATION=1`；已有安装的主机会拒绝运行该测试。不需要真实账号，也不发送模型请求。
 
 回归检查还覆盖：更新不恢复已暂停的任务；只改小时保留管理命令中的时区；登录检查超时后不发送请求；运行摘要的结果与退出码正确，且文件权限为 `0600`。
+
+<br>
 
 ## 参考
 
