@@ -47,7 +47,10 @@ case "$task_command" in
   schedule)
     task_hours=${1:-}
     task_timezone=${2:-Asia/Shanghai}
-    primer_validate_hours "$task_hours" && primer_validate_timezone "$task_timezone" || { printf '%s\n' 'Invalid hours or timezone.' >&2; exit 1; }
+    if ! primer_validate_hours "$task_hours" || ! primer_validate_timezone "$task_timezone"; then
+      printf '%s\n' 'Invalid hours or timezone.' >&2
+      exit 1
+    fi
     systemd-analyze calendar "*-*-* ${task_hours}:00:00 ${task_timezone}"
     task_timer=$(mktemp /etc/systemd/system/codex-primer.timer.XXXXXXXX)
     trap 'rm -f -- "$task_timer"' EXIT

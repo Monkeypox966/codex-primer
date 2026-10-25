@@ -84,8 +84,10 @@ if getent passwd codex-primer >/dev/null; then
 fi
 if [[ -d /opt/codex-primer && ! -f /opt/codex-primer/.managed-by-codex-primer ]]; then
   # Compatibility with the original deployment from this project.
-  [[ -f /opt/codex-primer/send-once.sh && -f /etc/systemd/system/codex-primer.service ]] &&
-    grep -qx 'User=codex-primer' /etc/systemd/system/codex-primer.service || die '/opt/codex-primer is not a recognized installation'
+  if [[ ! -f /opt/codex-primer/send-once.sh || ! -f /etc/systemd/system/codex-primer.service ]] ||
+     ! grep -qx 'User=codex-primer' /etc/systemd/system/codex-primer.service; then
+    die '/opt/codex-primer is not a recognized installation'
+  fi
 fi
 if systemctl is-active --quiet codex-primer.service; then
   die 'A request is currently running; retry installation after it finishes'

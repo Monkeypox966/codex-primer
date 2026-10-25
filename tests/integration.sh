@@ -20,7 +20,7 @@ sudo systemctl daemon-reload
 sudo systemctl start "$task_sentinel"
 task_pid_before=$(systemctl show "$task_sentinel" -p MainPID --value)
 sudo bash "$task_root/install.sh" --login skip --no-enable --hours 01,06 --timezone UTC
-! sudo test -f /var/lib/codex-primer/.codex/auth.json
+if sudo test -f /var/lib/codex-primer/.codex/auth.json; then exit 1; fi
 if systemctl is-enabled --quiet codex-primer.timer; then exit 1; fi
 sudo touch /var/lib/codex-primer/preserve-me
 sudo /usr/local/bin/codex-primer schedule 05,10,15,20 Asia/Shanghai
