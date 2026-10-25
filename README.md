@@ -1,107 +1,143 @@
 # Codex Primer
 
-在小内存 Debian / Ubuntu 服务器上，每天固定发送四次轻量 Codex 请求。
-
-默认在**北京时间 05:00、10:01、15:02、20:03** 使用 **GPT-6 Luna / low**，只要求回复 `OK`。白天相邻两次间隔 **5 小时 01 分钟**，跨夜至次日 05:00 为 8 小时 57 分钟。时间可配置，采用系统定时器，完成后退出。
-
-> 本项目安排普通订阅请求，不能增加额度、重置正在生效的窗口或绕过周额度。固定整点发送不保证每次开启新窗口，也不会根据额度连续重试。
+在 Debian / Ubuntu 服务器上，按固定时间自动发送轻量 Codex 请求。完成后退出，无常驻请求进程。
 
 <br>
 
-## 一键安装
+## 第一步：准备服务器
 
-适用于 **Debian / Ubuntu x86_64、运行 systemd 的主机**，需要 root 或 sudo。已在 Debian 13 实机验证，Ubuntu 24.04 的安装与卸载流程已通过 GitHub Actions。
-
-下载仓库后执行：
+需要 **x86_64 架构、使用 systemd 的 Debian / Ubuntu**，并具有 root 或 sudo 权限。
+通过 SSH 登录服务器后，先安装依赖：
 
 ```bash
-sudo bash install.sh
+sudo apt-get update
+sudo apt-get install -y git ca-certificates curl tar coreutils util-linux passwd tzdata
 ```
 
-安装器会下载并校验官方原生 Codex CLI、建立独立账号、引导首次登录并启用定时器。默认设备码登录：在浏览器打开终端显示的官方地址并完成授权。
+运行时使用官方原生 Codex CLI，无需额外安装 Node.js、Python 或 Docker。
+需要一个可登录 Codex 的 ChatGPT 订阅账号；请求会消耗真实订阅额度。
 
-仓库已公开，无需 GitHub 登录。已安装 Git 的机器可以直接克隆：
+<br>
+
+## 第二步：下载完整项目
 
 ```bash
 git clone https://github.com/Monkeypox966/codex-primer.git
 cd codex-primer
-sudo bash install.sh
 ```
 
-服务器没有 Git 时，可直接下载源码包：
+没有 Git 时，也可以下载并解压完整源码包：
 
 ```bash
 curl -fL https://github.com/Monkeypox966/codex-primer/archive/refs/heads/main.tar.gz -o codex-primer.tar.gz
 tar -xzf codex-primer.tar.gz
-sudo bash codex-primer-main/install.sh
-rm -f codex-primer.tar.gz
+cd codex-primer-main
 ```
 
-也可以使用 GitHub 页面上的 **Code → Download ZIP**，解压后上传到服务器。安装器依赖同目录的其他项目文件，不要只下载 `install.sh` 后单独执行。
-
-安装器不自动改动系统软件包。若缺少依赖，可先安装：
-
-```bash
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl tar coreutils util-linux passwd tzdata
-```
-
-重复安装会保留登录数据、未指定的时间设置及定时器的启停状态：已暂停的任务不会因更新而意外恢复；已启用但手动停止的定时器也保持停止。只传 `--hours` 会保留原时区，只传 `--timezone` 会保留原小时。首次下载包约 110 MiB，安装后的程序约 294 MiB，均为磁盘占用。
-
-安装、登录、修改时间和卸载使用同一个管理锁，避免同时运行造成文件冲突。更新文件前还会获取发送锁；安装包下载过程中若恰好开始了请求，会停止更新并提示稍后重试。程序和脚本按文件原子替换，不会把写到一半的文件交给定时任务执行。这不等于整个安装过程具备事务回滚。
-
-登录也会检查发送锁，避免请求正在运行时修改登录数据；并发的管理命令会直接给出提示，不排队或反复重试。
+安装器依赖同目录的其他文件，请保留完整项目目录。
 
 <br>
 
-## 管理命令
+## 第三步：安装并按提示登录
+
+在项目目录执行：
 
 ```bash
-sudo codex-primer status       # 登录、最后结果与下次触发
-sudo codex-primer logs         # 最近 30 条日志
-sudo codex-primer logs 100
-sudo codex-primer run          # 立即发送一次，消耗真实额度
-sudo codex-primer disable      # 暂停后续定时请求
-sudo codex-primer enable       # 恢复，并随系统启动
+sudo bash install.sh
 ```
 
-每个触发点启动一次 CLI，脚本无重试循环，服务失败不自动重启。CLI 自身可能进行有限网络重连；90 秒超时后终止，最多额外等待 10 秒。停机错过的触发不补发。
+安装器会下载并校验 Codex CLI、建立专用账号，并启动设备码登录。
+在自己电脑的浏览器打开终端显示的官方地址，按提示输入设备码、登录 ChatGPT 账号并完成授权。
 
-登录检查单独限制为 5 秒，终止后最多等待 2 秒，避免检查卡住导致任务一直占用资源。每次实际执行原子保存一份小型 `last-run.json`，包含起止时间、耗时、结果、退出码及可获得的内存峰值；`status` 会直接显示。不保存提示词、回复内容或登录凭据，历史记录不会无限增长。因并发锁跳过的触发不覆盖上次结果；OOM 或强制终止时仍应结合 systemd 的 `Result` 判断。
+首次安装成功后会启用定时器。默认按**北京时间 05:00、10:01、15:02、20:03**，
+使用 **GPT-6 Luna / low** 发送一次只要求回复 `OK` 的请求。
 
-发送前确认专用账号使用 ChatGPT 登录，并移除继承的 API Key 和其他 Codex 数据目录设置，避免误用不同的认证来源。请求只有在 CLI 退出码为零且最终回复确实为 `OK` 时才记为成功。最终回复放入权限受限的临时文件，结束后立即清理；检查登录状态本身不发送模型请求。
+如果设备码登录不可用，按下方“登录遇到问题”中的浏览器登录步骤操作。
 
 <br>
 
-## 修改时间
+## 第四步：确认安装结果
 
 ```bash
-# 安装时指定
-sudo bash install.sh --times 05:00,10:01,15:02,20:03 --timezone Asia/Shanghai
+sudo codex-primer status
+```
 
-# 安装后修改
+检查输出中的登录状态和下次触发时间。首次实际运行后，还会显示最近一次请求的结果。
+需要马上验证一次真实请求时，执行：
+
+```bash
+sudo codex-primer run
+sudo codex-primer status
+```
+
+`run` 会消耗真实额度；查看 `status` 不发送模型请求。
+本项目安排普通订阅请求，时间安排不保证开启新的用量窗口，也不能增加或重置额度。
+
+<br>
+
+## 日常操作
+
+| 想做什么 | 命令 |
+| --- | --- |
+| 查看登录、最近结果和下次触发 | `sudo codex-primer status` |
+| 查看最近 30 条日志 | `sudo codex-primer logs` |
+| 查看最近 100 条日志 | `sudo codex-primer logs 100` |
+| 立即发送一次请求 | `sudo codex-primer run` |
+| 暂停后续定时请求 | `sudo codex-primer disable` |
+| 恢复定时请求，并随系统启动 | `sudo codex-primer enable` |
+| 重新登录 | `sudo codex-primer login device` |
+
+登录失效、额度不足或模型不可用时会记录失败，等待下个固定触发点。
+每个触发点只启动一次 CLI，不会循环补发；停机错过的请求也不会补发。
+
+<br>
+
+## 修改运行时间
+
+安装后执行：
+
+```bash
 sudo codex-primer schedule 05:00,10:01,15:02,20:03 Asia/Shanghai
-
-# 只修改小时，保留当前时区
-sudo codex-primer schedule 05:00,10:01,15:02,20:03
-
-# 只检查环境及参数，不写入系统
-bash install.sh --check
-
-# 只安装文件，跳过登录，不启用新的定时器
-sudo bash install.sh --login skip --no-enable
-
-# 更新时显式恢复定时器
-sudo bash install.sh --enable
+sudo codex-primer status
 ```
 
-首次安装默认启用；更新默认保留已有启停状态，`--enable` 显式恢复，`--no-enable` 在首次安装时不启用。暂停已安装任务请使用 `disable`。时间按指定 IANA 时区解释，不修改服务器全局时区。状态表格可能显示服务器本地时间；同一输出的 `OnCalendar` 显示实际配置。运行摘要的时间使用 UTC，以字段后的 `Z` 标识。
+把时间改成自己需要的逗号分隔 `HH:MM` 列表；最后一项是 IANA 时区。
+省略时区会保留当前设置，不修改服务器全局时区。
+状态表格可能显示服务器本地时间，以同一输出中的 `OnCalendar` 配置为准。
 
-`--times` 和 `schedule` 支持逗号分隔的 `HH:MM`，每个时间点单独生成一条 `OnCalendar`，避免小时与分钟组合产生多余触发。旧的 `--hours 05,10,15,20` 及整点 `schedule` 写法继续兼容。已有安装更新时保留原时间；要迁移到新默认时间，请显式执行上面的 `schedule` 命令。
+也可以在首次安装时指定时间：
+
+```bash
+sudo bash install.sh --times 05:00,10:01,15:02,20:03 --timezone Asia/Shanghai
+```
 
 <br>
 
-## 无头服务器登录
+## 更新与卸载
+
+更新时在项目目录执行：
+
+```bash
+git pull --ff-only
+sudo bash install.sh
+```
+
+重复安装会保留登录数据、未显式修改的时间设置和定时器启停状态。
+已暂停的任务更新后仍然暂停，需要恢复时执行 `sudo codex-primer enable`。
+旧版本升级也会保留原运行时间；要采用新的默认时间，请手动运行上面的 `schedule` 命令。
+
+卸载时选择是否保留登录数据：
+
+```bash
+sudo codex-primer uninstall           # 移除程序，保留专用账号和登录数据
+sudo codex-primer uninstall --purge   # 同时删除本项目的专用账号和数据
+```
+
+只操作本项目的账号、目录与 systemd 单元；历史日志由系统 journald 按原策略保留。
+
+<br>
+
+## 登录遇到问题
 
 使用希望预热的 **ChatGPT 订阅账号**。普通 API Key 的计费与订阅额度分开。
 
@@ -132,7 +168,23 @@ sudo codex-primer login device
 
 <br>
 
-## 内存与资源
+## 可选安装方式
+
+```bash
+bash install.sh --check                       # 只检查环境和参数
+sudo bash install.sh --login skip --no-enable # 首次安装时跳过登录且不启用定时器
+sudo bash install.sh --enable                 # 更新时显式恢复定时器
+```
+
+`--no-enable` 只控制首次安装时不启用新的定时器；暂停已有任务使用 `disable`。
+安装或登录遇到“正在运行/锁被占用”的提示时，等待当前操作结束后再试。
+
+<br>
+
+## 实现与验证（可选）
+
+<details>
+<summary>资源限制、测试与运行细节</summary>
 
 - 官方原生 CLI，固定版本 **0.164.0**，核对 SHA-256；运行无需 Node.js、Python 或 Docker。
 - 请求完成即退出，专用账号下无常驻进程。
@@ -149,18 +201,7 @@ Debian 13、约 1 GiB 内存主机上的一次测试：服务内存峰值 **30.9
 
 <br>
 
-## 卸载
-
-```bash
-sudo codex-primer uninstall           # 移除本项目，保留账号和登录数据
-sudo codex-primer uninstall --purge   # 同时清除本项目的专用账号及数据
-```
-
-只操作本项目的账号、目录与 systemd 单元，不操作其他代理、防火墙、网络服务或容器。历史日志由系统 journald 按原策略保留。
-
-<br>
-
-## 验证
+### 开发验证
 
 ```bash
 bash tests/smoke.sh
@@ -170,6 +211,11 @@ shellcheck -x install.sh manage.sh send-once.sh lib/common.sh tests/*.sh
 `tests/integration.sh` 在一次性 systemd 主机上验证首次 / 重复安装、只修改小时或时区时保留另一项、启停、缺少登录和 API Key 登录时拒绝请求，以及两种卸载方式，同时检查另一服务的进程号不变。发送包装脚本用本地假 CLI 验证正确回复、错误回复和原始错误码传递。为避免误操作，必须显式设置 `CODEX_PRIMER_INTEGRATION=1`；已有安装的主机会拒绝运行该测试。不需要真实账号，也不发送模型请求。
 
 回归检查还覆盖：更新不恢复已暂停的任务；只改小时保留管理命令中的时区；登录检查超时后不发送请求；运行摘要的结果与退出码正确，且文件权限为 `0600`。
+
+安装、登录、修改时间和卸载使用管理锁；更新前另行获取发送锁，避免请求运行时替换程序。
+文件按原子方式替换，但整个安装过程不具备事务回滚。
+
+</details>
 
 <br>
 
