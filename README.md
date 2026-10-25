@@ -8,7 +8,7 @@
 
 ## 一键安装
 
-适用于 **Debian / Ubuntu x86_64、运行 systemd 的主机**，需要 root 或 sudo。已在 Debian 13 验证。
+适用于 **Debian / Ubuntu x86_64、运行 systemd 的主机**，需要 root 或 sudo。已在 Debian 13 实机验证，Ubuntu 24.04 的安装与卸载流程已通过 GitHub Actions。
 
 下载仓库后执行：
 
@@ -18,15 +18,24 @@ sudo bash install.sh
 
 安装器会下载并校验官方原生 Codex CLI、建立独立账号、引导首次登录并启用定时器。默认设备码登录：在浏览器打开终端显示的官方地址并完成授权。
 
-本仓库为私有仓库，需要先通过 GitHub 授权取得源码。例如在已登录 GitHub CLI 的机器上：
+仓库已公开，无需 GitHub 登录。已安装 Git 的机器可以直接克隆：
 
 ```bash
-gh repo clone Monkeypox966/codex-primer
+git clone https://github.com/Monkeypox966/codex-primer.git
 cd codex-primer
 sudo bash install.sh
 ```
 
-也可以在 Windows 上下载项目，再把目录上传到服务器执行安装。
+服务器没有 Git 时，可直接下载源码包：
+
+```bash
+curl -fL https://github.com/Monkeypox966/codex-primer/archive/refs/heads/main.tar.gz -o codex-primer.tar.gz
+tar -xzf codex-primer.tar.gz
+sudo bash codex-primer-main/install.sh
+rm -f codex-primer.tar.gz
+```
+
+也可以使用 GitHub 页面上的 **Code → Download ZIP**，解压后上传到服务器。安装器依赖同目录的其他项目文件，不要只下载 `install.sh` 后单独执行。
 
 安装器不自动改动系统软件包。若缺少依赖，可先安装：
 
