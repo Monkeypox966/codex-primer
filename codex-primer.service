@@ -11,7 +11,7 @@ Group=codex-primer
 WorkingDirectory=/var/lib/codex-primer/work
 ExecStart=/opt/codex-primer/send-once.sh
 Environment=RUST_LOG=error
-UnsetEnvironment=OPENAI_API_KEY CODEX_API_KEY CODEX_ACCESS_TOKEN OPENAI_BASE_URL
+UnsetEnvironment=OPENAI_API_KEY CODEX_API_KEY CODEX_ACCESS_TOKEN OPENAI_BASE_URL CODEX_HOME CODEX_SQLITE_HOME
 UMask=0077
 TimeoutStartSec=110s
 TimeoutStopSec=10s

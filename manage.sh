@@ -21,10 +21,14 @@ task_command=${1:-help}
 [[ $# == 0 ]] || shift
 case "$task_command" in help|-h|--help) usage; exit 0 ;; esac
 ((EUID == 0)) || { printf '%s\n' 'Run with sudo or as root.' >&2; exit 1; }
+case "$task_command" in
+  status|logs) ;;
+  run|login|enable|disable|schedule|uninstall) primer_lock_management || exit 1 ;;
+esac
 
 case "$task_command" in
   status)
-    runuser -u codex-primer -- /opt/codex-primer/bin/codex-x86_64-unknown-linux-musl login status || true
+    primer_as_user /opt/codex-primer/bin/codex-x86_64-unknown-linux-musl login status || true
     systemctl show codex-primer.service -p Result -p ActiveState -p MemoryMax -p CPUQuotaPerSecUSec
     systemctl list-timers --all codex-primer.timer --no-pager
     grep '^OnCalendar=' /etc/systemd/system/codex-primer.timer ;;
@@ -33,13 +37,18 @@ case "$task_command" in
     [[ $task_lines =~ ^[1-9][0-9]{0,3}$ ]] || { printf '%s\n' 'LINES must be 1-9999.' >&2; exit 1; }
     journalctl -u codex-primer.service -n "$task_lines" --no-pager ;;
   run)
-    [[ -f /var/lib/codex-primer/.codex/auth.json ]] || { printf '%s\n' 'Sign in first: sudo codex-primer login' >&2; exit 1; }
+    primer_has_subscription_login || { printf '%s\n' 'Sign in with ChatGPT first: sudo codex-primer login' >&2; exit 1; }
     systemctl start codex-primer.service
     journalctl -u codex-primer.service -n 12 --no-pager -o cat ;;
   login)
+    exec 9<>/var/lib/codex-primer/send.lock
+    if ! flock -n 9; then
+      printf '%s\n' 'A request is running; sign in after it finishes.' >&2
+      exit 1
+    fi
     case "${1:-device}" in
-      device) exec runuser -u codex-primer -- /opt/codex-primer/bin/codex-x86_64-unknown-linux-musl login --device-auth ;;
-      browser) exec runuser -u codex-primer -- /opt/codex-primer/bin/codex-x86_64-unknown-linux-musl login ;;
+      device) primer_as_user /opt/codex-primer/bin/codex-x86_64-unknown-linux-musl login --device-auth ;;
+      browser) primer_as_user /opt/codex-primer/bin/codex-x86_64-unknown-linux-musl login ;;
       *) printf '%s\n' 'Login method must be device or browser.' >&2; exit 1 ;;
     esac ;;
   enable) systemctl enable --now codex-primer.timer ;;
@@ -62,7 +71,14 @@ case "$task_command" in
     printf '%s\n' 'Schedule updated.' ;;
   uninstall)
     [[ $# == 0 || ( $# == 1 && $1 == --purge ) ]] || { usage >&2; exit 1; }
-    [[ -f /opt/codex-primer/.managed-by-codex-primer ]] || { printf '%s\n' 'Installation marker is missing; refusing removal.' >&2; exit 1; }
+    if [[ -L /opt/codex-primer ]] || ! grep -qx 'codex-primer-v1' /opt/codex-primer/.managed-by-codex-primer; then
+      printf '%s\n' 'Installation marker is missing or unexpected; refusing removal.' >&2
+      exit 1
+    fi
+    if [[ ${1:-} == --purge ]]; then
+      task_account_home=$(getent passwd codex-primer | cut -d: -f6)
+      [[ $task_account_home == /var/lib/codex-primer && ! -L /var/lib/codex-primer ]] || { printf '%s\n' 'Unexpected account home; refusing purge before making changes.' >&2; exit 1; }
+    fi
     systemctl disable --now codex-primer.timer
     systemctl stop codex-primer.service
     rm -f -- /etc/systemd/system/codex-primer.timer /etc/systemd/system/codex-primer.service
@@ -70,8 +86,6 @@ case "$task_command" in
     systemctl daemon-reload
     systemctl reset-failed codex-primer.service 2>/dev/null || true
     if [[ ${1:-} == --purge ]]; then
-      task_account_home=$(getent passwd codex-primer | cut -d: -f6)
-      [[ $task_account_home == /var/lib/codex-primer ]] || { printf '%s\n' 'Unexpected account home; refusing purge.' >&2; exit 1; }
       userdel --remove codex-primer
     fi
     rm -rf -- /opt/codex-primer

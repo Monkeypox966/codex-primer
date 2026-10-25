@@ -9,7 +9,8 @@ task_timezone=Asia/Shanghai
 task_login=device
 task_enable=true
 task_check=false
-task_schedule_set=false
+task_hours_set=false
+task_timezone_set=false
 task_stage=
 task_version=0.164.0
 task_binary=codex-x86_64-unknown-linux-musl
@@ -37,8 +38,8 @@ while (($#)); do
     --hours|--timezone|--login)
       (($# >= 2)) || die "Missing value for $1"
       case "$1" in
-        --hours) task_hours=$2; task_schedule_set=true ;;
-        --timezone) task_timezone=$2; task_schedule_set=true ;;
+        --hours) task_hours=$2; task_hours_set=true ;;
+        --timezone) task_timezone=$2; task_timezone_set=true ;;
         --login) task_login=$2 ;;
       esac
       shift 2 ;;
@@ -49,8 +50,6 @@ while (($#)); do
   esac
 done
 
-primer_validate_hours "$task_hours" || die 'Invalid hours; example: 05,10,15,20'
-primer_validate_timezone "$task_timezone" || die 'Invalid or unavailable IANA timezone; install tzdata if needed'
 [[ $task_login == device || $task_login == browser || $task_login == skip ]] || die 'Invalid login method'
 [[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] || die 'This release supports x86_64 Linux only'
 [[ -r /etc/os-release ]] || die 'Cannot identify operating system'
@@ -61,17 +60,41 @@ for task_command in curl tar sha256sum systemctl systemd-analyze useradd userdel
   command -v "$task_command" >/dev/null || die "Missing command: $task_command (see README prerequisites)"
 done
 [[ -d /run/systemd/system ]] || die 'A running systemd host is required; containers without systemd are unsupported'
+if ! $task_check; then
+  ((EUID == 0)) || die 'Run this installer with sudo or as root'
+  primer_lock_management || exit 1
+fi
+if [[ -f /etc/systemd/system/codex-primer.timer ]] && { ! $task_hours_set || ! $task_timezone_set; }; then
+  if task_existing_calendar=$(primer_existing_calendar /etc/systemd/system/codex-primer.timer); then
+    $task_hours_set || task_hours=${task_existing_calendar%%$'\n'*}
+    $task_timezone_set || task_timezone=${task_existing_calendar#*$'\n'}
+  elif $task_hours_set || $task_timezone_set; then
+    die 'Cannot parse the existing schedule; specify both --hours and --timezone'
+  fi
+fi
+primer_validate_hours "$task_hours" || die 'Invalid hours; example: 05,10,15,20'
+primer_validate_timezone "$task_timezone" || die 'Invalid or unavailable IANA timezone; install tzdata if needed'
 systemd-analyze calendar "*-*-* ${task_hours}:00:00 ${task_timezone}" >/dev/null
 if $task_check; then
   printf '%s\n' 'Prerequisites and schedule are valid. No changes made.'
   exit 0
 fi
-((EUID == 0)) || die 'Run this installer with sudo or as root'
 for task_file in send-once.sh manage.sh instructions.txt codex-primer.service lib/common.sh; do
   [[ -r $task_source_dir/$task_file ]] || die "Incomplete source checkout: $task_file is missing"
 done
 if [[ -e /var/lib/codex-primer ]] && ! getent passwd codex-primer >/dev/null; then
   die '/var/lib/codex-primer exists without the dedicated account; refusing to change its ownership'
+fi
+for task_path in /opt/codex-primer /var/lib/codex-primer /etc/systemd/system/codex-primer.service /etc/systemd/system/codex-primer.timer; do
+  [[ ! -L $task_path ]] || die "Refusing to overwrite symlink: $task_path"
+done
+if [[ -f /etc/systemd/system/codex-primer.service ]] &&
+   ! grep -qx 'User=codex-primer' /etc/systemd/system/codex-primer.service; then
+  die 'Existing codex-primer.service belongs to another application'
+fi
+if [[ -f /etc/systemd/system/codex-primer.timer ]] &&
+   ! grep -qx 'Unit=codex-primer.service' /etc/systemd/system/codex-primer.timer; then
+  die 'Existing codex-primer.timer belongs to another application'
 fi
 
 # Refuse to replace an unrelated command or account.
@@ -106,7 +129,7 @@ else
   printf '%s  %s\n' "$task_sha256" "$task_stage/codex.tar.gz" | sha256sum --check --status || die 'Codex checksum mismatch'
   tar -xzf "$task_stage/codex.tar.gz" -C "$task_stage" "$task_binary"
 fi
-if ! $task_schedule_set && [[ -f /etc/systemd/system/codex-primer.timer ]]; then
+if ! $task_hours_set && ! $task_timezone_set && [[ -f /etc/systemd/system/codex-primer.timer ]]; then
   cp /etc/systemd/system/codex-primer.timer "$task_stage/codex-primer.timer"
 else
   primer_render_timer "$task_hours" "$task_timezone" >"$task_stage/codex-primer.timer"
@@ -123,22 +146,32 @@ fi
 install -d -m 0755 /opt/codex-primer/bin /opt/codex-primer/lib
 install -d -o codex-primer -g codex-primer -m 0700 \
   /var/lib/codex-primer /var/lib/codex-primer/.codex /var/lib/codex-primer/work
+# Recheck at commit time, after a potentially slow download. Scheduled sends use
+# the same file lock and will skip a trigger while files are being replaced.
+exec 9<>/var/lib/codex-primer/send.lock
+chown codex-primer:codex-primer /var/lib/codex-primer/send.lock
+chmod 0600 /var/lib/codex-primer/send.lock
+flock -n 9 || die 'A request started during installation; retry after it finishes'
 if [[ -f $task_stage/$task_binary ]]; then
-  install -o root -g root -m 0755 "$task_stage/$task_binary" "/opt/codex-primer/bin/$task_binary"
+  primer_atomic_install 0755 "$task_stage/$task_binary" "/opt/codex-primer/bin/$task_binary"
 fi
-install -m 0755 "$task_source_dir/send-once.sh" "$task_source_dir/manage.sh" /opt/codex-primer/
-install -m 0644 "$task_source_dir/instructions.txt" /opt/codex-primer/instructions.txt
-install -m 0644 "$task_source_dir/lib/common.sh" /opt/codex-primer/lib/common.sh
-install -m 0644 "$task_stage/codex-primer.service" "$task_stage/codex-primer.timer" /etc/systemd/system/
+for task_file in send-once.sh manage.sh; do
+  primer_atomic_install 0755 "$task_source_dir/$task_file" "/opt/codex-primer/$task_file"
+done
+primer_atomic_install 0644 "$task_source_dir/instructions.txt" /opt/codex-primer/instructions.txt
+primer_atomic_install 0644 "$task_source_dir/lib/common.sh" /opt/codex-primer/lib/common.sh
+for task_file in codex-primer.service codex-primer.timer; do
+  primer_atomic_install 0644 "$task_stage/$task_file" "/etc/systemd/system/$task_file"
+done
 printf '%s\n' 'codex-primer-v1' >/opt/codex-primer/.managed-by-codex-primer
 ln -sfn /opt/codex-primer/manage.sh /usr/local/bin/codex-primer
 systemd-analyze verify /etc/systemd/system/codex-primer.service /etc/systemd/system/codex-primer.timer
 systemctl daemon-reload
 
-if ! runuser -u codex-primer -- "/opt/codex-primer/bin/$task_binary" login status >/dev/null 2>&1; then
+if ! primer_has_subscription_login; then
   case "$task_login" in
-    device) /usr/local/bin/codex-primer login device || die 'Login failed. Files are installed; run sudo codex-primer login browser or device, then sudo codex-primer enable.' ;;
-    browser) /usr/local/bin/codex-primer login browser || die 'Login failed. Files are installed; follow the README SSH callback instructions.' ;;
+    device) primer_as_user "/opt/codex-primer/bin/$task_binary" login --device-auth || die 'Login failed. Files are installed; run sudo codex-primer login browser or device, then sudo codex-primer enable.' ;;
+    browser) primer_as_user "/opt/codex-primer/bin/$task_binary" login || die 'Login failed. Files are installed; follow the README SSH callback instructions.' ;;
     skip) printf '%s\n' 'Login skipped. The service will skip requests until an auth file exists.' ;;
   esac
 fi

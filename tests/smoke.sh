@@ -24,3 +24,18 @@ if bash "$task_root/install.sh" --hours '5;touch /tmp/codex-primer-test-injectio
   exit 1
 fi
 printf '%s\n' 'Schedule and argument checks passed.'
+
+task_temp=$(mktemp -d)
+trap 'rm -rf -- "$task_temp"' EXIT
+primer_render_timer 01,06 UTC >"$task_temp/codex-primer.timer"
+[[ $(primer_existing_calendar "$task_temp/codex-primer.timer") == $'01,06\nUTC' ]]
+printf 'OnCalendar=daily\n' >"$task_temp/unsupported.timer"
+if primer_existing_calendar "$task_temp/unsupported.timer"; then
+  printf '%s\n' 'An unsupported schedule was accepted.' >&2
+  exit 1
+fi
+printf 'old\n' >"$task_temp/target"
+printf 'new\n' >"$task_temp/source"
+primer_atomic_install 0644 "$task_temp/source" "$task_temp/target"
+[[ $(<"$task_temp/target") == new && $(stat -c %a "$task_temp/target") == 644 ]]
+printf '%s\n' 'Calendar parsing and atomic file replacement checks passed.'
